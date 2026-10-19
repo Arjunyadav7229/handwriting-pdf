@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Handwriting PDF Maker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat&family=Homemade+Apple&family=Indie+Flower&family=Reenie+Beanie&display=swap">
+<style>
+:root{--bg:#f6f5f1;--surface:#fff;--text:#1d1d1b;--muted:#6b6b66;--accent:#2f5bd3;--border:#d9d7cf;--paper:#fffefb;--rule:#b9cde8;--margin:#e7a3a3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17171a;--surface:#222226;--text:#ececea;--muted:#9a9a94;--accent:#7f9cf5;--border:#3a3a40}}
+:root[data-theme="dark"]{--bg:#17171a;--surface:#222226;--text:#ececea;--muted:#9a9a94;--accent:#7f9cf5;--border:#3a3a40}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+main{max-width:720px;margin:0 auto}
+h1{font-size:1.3rem;margin:0 0 12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+textarea{width:100%;min-height:150px;border:1px solid var(--border);border-radius:8px;padding:10px;font:inherit;background:var(--bg);color:var(--text);resize:vertical}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+label{display:flex;flex-direction:column;font-size:.8rem;color:var(--muted);gap:4px;flex:1 1 130px}
+select,input[type=range]{width:100%;font:inherit;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+button{width:100%;padding:14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:1rem;font-weight:600;margin-top:12px}
+button:disabled{opacity:.6}
+#preview{overflow:hidden}
+.pw{margin:0 auto 12px;overflow:hidden}
+.page{width:794px;height:1123px;background:var(--paper);position:relative;transform-origin:top left;color:#111}
+.page::before{content:"";position:absolute;left:70px;top:0;bottom:0;width:2px;background:var(--margin)}
+.inner{position:absolute;left:90px;top:70px;right:50px;overflow:hidden;white-space:pre-wrap;word-break:break-word}
+.pno{position:absolute;bottom:24px;right:50px;font:14px system-ui;color:#999}
+.off{position:fixed;left:-10000px;top:0}
+.off .page{transform:none}
+#msg{font-size:.85rem;color:var(--muted);margin-top:8px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<h1>✍️ Handwriting PDF बनाएँ</h1>
+<div class="card">
+<textarea id="txt" placeholder="यहाँ अपना टेक्स्ट लिखें या paste करें… (अंग्रेज़ी में सबसे अच्छा दिखता है)">Dear Sir,
+
+I am writing to inform you that I will be unable to attend school tomorrow due to a medical appointment. Kindly grant me leave for one day.
+
+Thank you.
+
+Yours faithfully,
+Rahul</textarea>
+<div class="row">
+<label style="flex-basis:100%">आपका नाम (सिर्फ़ प्रीव्यू में दिखेगा, PDF में नहीं)
+<input type="text" id="name" placeholder="जैसे: Rahul Sharma" style="width:100%;font:inherit;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></label>
+<label>Handwriting style
+<select id="font"><option value="Caveat">Caveat (साफ़)</option><option value="Indie Flower">Indie Flower</option><option value="Homemade Apple">Homemade Apple</option><option value="Reenie Beanie">Reenie Beanie</option></select></label>
+<label>Ink रंग
+<select id="ink"><option value="#1a3fa8">नीला</option><option value="#1a1a1a">काला</option><option value="#5a2a8a">बैंगनी</option></select></label>
+<label>Font size: <span id="szv">26</span>
+<input type="range" id="size" min="18" max="40" value="26"></label>
+<label>Lines वाला paper
+<select id="ruled"><option value="1">हाँ</option><option value="0">नहीं</option></select></label>
+</div>
+<button id="dl">📄 PDF डाउनलोड करें</button>
+<div id="msg"></div>
+</div>
+<div id="preview"></div>
+<footer style="text-align:center;padding:20px 0 12px;color:var(--muted);font-size:.9rem">Created by <strong style="color:var(--text)">Arjun Yadav</strong></footer>
+</main>
+<div class="off" id="off"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+var $=function(i){return document.getElementById(i)};
+var PW=794,PH=1123;
+
+function opts(){
+  var size=+$('size').value;
+  return {name:$('name').value.trim(),font:$('font').value,ink:$('ink').value,size:size,lh:Math.round(size*1.35),ruled:$('ruled').value==='1'};
+}
+
+function makePage(o,n){
+  var lh=o.lh, h=Math.floor((PH-70-90)/lh)*lh;
+  var p=document.createElement('div');p.className='page';
+  var inn=document.createElement('div');inn.className='inner';
+  inn.style.cssText='height:'+h+'px;font-family:"'+o.font+'",cursive;font-size:'+o.size+'px;line-height:'+lh+'px;color:'+o.ink+';'+
+    (o.ruled?'background-image:linear-gradient(transparent '+(lh-1)+'px,#b9cde8 '+(lh-1)+'px);background-size:100% '+lh+'px;':'');
+  var no=document.createElement('div');no.className='pno';no.textContent=n;
+  p.appendChild(inn);p.appendChild(no);
+  if(o.name){var nm=document.createElement('div');nm.textContent='Name: '+o.name;
+    nm.style.cssText='position:absolute;left:90px;top:24px;font-family:"'+o.font+'",cursive;font-size:'+o.size+'px;color:'+o.ink+';';
+    p.appendChild(nm);}
+  if(!o.ruled)p.style.setProperty('--x','0');
+  return p;
+}
+
+function paginate(text,o){
+  var m=makePage(o,0);$('off').appendChild(m);
+  var inn=m.querySelector('.inner'),pages=[],buf='';
+  var tokens=text.split(/(\s+)/);
+  for(var i=0;i<tokens.length;i++){
+    var t=tokens[i];
+    inn.textContent=buf+t;
+    if(inn.scrollHeight>inn.clientHeight+1&&buf.trim()!==''){
+      pages.push(buf);buf=t.replace(/^\s+/,'');
+    }else buf+=t;
+  }
+  pages.push(buf);
+  $('off').removeChild(m);
+  return pages;
+}
+
+function build(container,pages,o,scale){
+  container.innerHTML='';
+  pages.forEach(function(t,i){
+    var p=makePage(o,i+1);
+    p.querySelector('.inner').textContent=t;
+    if(scale){
+      var w=document.createElement('div');w.className='pw';
+      w.style.width=PW*scale+'px';w.style.height=PH*scale+'px';
+      p.style.transform='scale('+scale+')';
+      w.appendChild(p);container.appendChild(w);
+    }else container.appendChild(p);
+  });
+}
+
+var timer;
+function render(){
+  var o=opts();$('szv').textContent=o.size;
+  var go=function(){
+    var pages=paginate($('txt').value,o);
+    var s=Math.min(1,($('preview').clientWidth||PW)/PW);
+    build($('preview'),pages,o,s);
+  };
+  if(document.fonts&&document.fonts.load){
+    document.fonts.load(o.size+'px "'+o.font+'"').then(go,go);
+  }else go();
+}
+['txt','name','font','ink','size','ruled'].forEach(function(id){
+  $(id).addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(render,200)});
+});
+window.addEventListener('resize',function(){clearTimeout(timer);timer=setTimeout(render,200)});
+window.addEventListener('load',render);
+
+$('dl').addEventListener('click',async function(){
+  var btn=$('dl'),msg=$('msg');
+  btn.disabled=true;msg.textContent='PDF बन रही है… थोड़ा रुकें';
+  try{
+    var o=opts();o.name='';
+    await document.fonts.load(o.size+'px "'+o.font+'"');
+    var pages=paginate($('txt').value,o);
+    var off=$('off');build(off,pages,o,0);
+    var pdf=new window.jspdf.jsPDF('p','mm','a4');
+    var els=off.querySelectorAll('.page');
+    for(var i=0;i<els.length;i++){
+      var c=await html2canvas(els[i],{scale:2,backgroundColor:null,useCORS:true});
+      if(i>0)pdf.addPage();
+      pdf.addImage(c.toDataURL('image/jpeg',0.92),'JPEG',0,0,210,297);
+    }
+    off.innerHTML='';
+    var blob=pdf.output('blob');
+    var dls=window.claude?await window.claude.use('downloads'):null;
+    if(!dls){pdf.save('handwriting.pdf');msg.textContent='✅ PDF डाउनलोड हो गई! Downloads में देखें।';btn.disabled=false;return;}
+    if(!dls){msg.textContent='इस व्यू में डाउनलोड उपलब्ध नहीं है। Claude ऐप/ब्राउज़र में आर्टिफैक्ट खोलें।';}
+    else{
+      await dls.save({filename:'handwriting.pdf',data:blob});
+      msg.textContent='✅ PDF सेव हो गई! Downloads में देखें।';
+    }
+  }catch(e){
+    msg.textContent=(e&&e.code==='declined')?'आपने डाउनलोड रद्द कर दिया।':'कुछ गड़बड़ हुई, दोबारा कोशिश करें।';
+  }
+  btn.disabled=false;
+});
+</script>
+</body>
+</html>
